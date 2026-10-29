@@ -21,6 +21,7 @@ Panel {
   property bool failed: false
   property string diagnostic: ""
   property string actionVerb: ""
+  property bool showVirtualResolutions: false
   readonly property string backend: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/omarchy/plugins/local.tablet-usb/backend.py"
   readonly property color ink: Color.foreground
   readonly property color muted: Qt.rgba(ink.r, ink.g, ink.b, 0.65)
@@ -39,6 +40,32 @@ Panel {
     var portrait = Number(draft.height) > Number(draft.width)
     edit("width", Number(parts[portrait ? 1 : 0]))
     edit("height", Number(parts[portrait ? 0 : 1]))
+    if (!validScale(draft.scale)) edit("scale", [1.5,1.25,1,2].filter(s => validScale(s))[0] || 1)
+  }
+  function validScale(scale) {
+    return [draft.width,draft.height].every(n => Math.abs(n/scale - Math.round(n/scale)) < 0.01)
+  }
+  function resolutionValues() {
+    var cap = info.capabilities || {}
+    var physical = (cap.supportedModes || []).map(m => Math.max(m.width,m.height) + "×" + Math.min(m.width,m.height))
+    var current = Math.max(draft.width || 0,draft.height || 0) + "×" + Math.min(draft.width || 0,draft.height || 0)
+    var nativeSize = cap.width ? Math.max(cap.width,cap.height) + "×" + Math.min(cap.width,cap.height) : ""
+    var values = physical.concat([current,nativeSize])
+    if (showVirtualResolutions && cap.width) {
+      [0.75,0.5].forEach(f => {
+        var w = Math.max(480,Math.floor(Math.max(cap.width,cap.height)*f/2)*2)
+        var h = Math.max(480,Math.floor(Math.min(cap.width,cap.height)*f/2)*2)
+        values.push(w + "×" + h)
+      })
+    }
+    return values.filter((v,i,a) => v !== "" && v !== "0×0" && a.indexOf(v) === i)
+  }
+  function resolutionLabel(value) {
+    var physical = ((info.capabilities || {}).supportedModes || []).some(m => Math.max(m.width,m.height) + "×" + Math.min(m.width,m.height) === value)
+    return value + (physical ? " · panel" : " · virtual")
+  }
+  function refreshValues() {
+    return [30,draft.refresh].concat(((info.capabilities || {}).supportedModes || []).map(m => m.refresh)).filter((v,i,a) => v >= 10 && v <= 120 && a.indexOf(v) === i).sort((a,b) => a-b)
   }
   function orientation(value) {
     if ((value === "Vertical") !== (Number(draft.height) > Number(draft.width))) {
@@ -54,7 +81,7 @@ Panel {
     var factor = Math.min(1, 4096/w, 4096/h, Math.sqrt((4096*2160)/(w*h))) * ({"Texto nítido":1,"Equilibrado":0.75,"Ligero":0.5}[name])
     w = Math.max(480, Math.floor(w * factor / 2) * 2)
     h = Math.max(480, Math.floor(h * factor / 2) * 2)
-    var scale = [1.6,1.25,1].filter(s => w/s === Math.round(w/s) && h/s === Math.round(h/s))[0] || 1
+    var scale = [1.5,1.25,1].filter(s => w/s === Math.round(w/s) && h/s === Math.round(h/s))[0] || 1
     if (w <= 1920) scale = 1
     var rate = Math.min(120, cap.refresh || draft.refresh || 60)
     var values = {width:w,height:h,scale:scale,refresh:rate,fps:Math.min(rate,name === "Texto nítido" ? 60 : 30),quality:name === "Texto nítido" ? 9 : name === "Equilibrado" ? 7 : 5,compression:name === "Ligero" ? 3 : 2}
@@ -204,6 +231,11 @@ Panel {
           ActionButton { text: "Abrir AVNC"; enabled: !!root.info.active && !root.busy; onClicked: root.send("viewer") }
         }
         Label { text: "Imagen"; font.bold: true; font.pixelSize: Style.space(16) }
+        Label {
+          text: ((root.info.capabilities || {}).supportedModes || []).length ? "Modos físicos declarados por Android: " + root.info.capabilities.supportedModes.map(m => m.width + "×" + m.height + " @ " + m.refresh + " Hz").join(" · ") : "Modos físicos aún no confirmados. Usa Leer modos del dispositivo o ejecuta omadesk setup; las resoluciones virtuales no son modos físicos."
+          font.pixelSize: Style.space(11); color: root.muted
+        }
+        QQC.CheckBox { text: "Mostrar resoluciones virtuales reducidas"; checked: root.showVirtualResolutions; onToggled: root.showVirtualResolutions = checked; palette.windowText: root.ink }
         RowLayout {
           Repeater {
             model: ["Texto nítido", "Equilibrado", "Ligero"]
@@ -217,23 +249,19 @@ Panel {
           Layout.fillWidth: true
           Label { text: "Resolución" }
           Choice {
-            values: {
-              var cap = root.info.capabilities || {}
-              var nativeSize = cap.width ? Math.max(cap.width, cap.height) + "×" + Math.min(cap.width, cap.height) : ""
-              var current = Math.max(root.draft.width || 0, root.draft.height || 0) + "×" + Math.min(root.draft.width || 0, root.draft.height || 0)
-              return [nativeSize, current, "2560×1600", "1920×1200", "1600×1000", "1280×800"].filter((v,i,a) => v !== "" && a.indexOf(v) === i)
-            }
+            values: root.resolutionValues()
+            labels: values.map(v => root.resolutionLabel(v))
             selectedValue: Math.max(root.draft.width || 0, root.draft.height || 0) + "×" + Math.min(root.draft.width || 0, root.draft.height || 0)
             onChosen: value => root.setResolution(value)
           }
           Label { text: "Orientación" }
           Choice { values: ["Horizontal", "Vertical"]; selectedValue: root.draft.height > root.draft.width ? "Vertical" : "Horizontal"; onChosen: value => root.orientation(value) }
           Label { text: "Frecuencia virtual (Hz)" }
-          Choice { values: [30, 60, root.draft.refresh, Math.min(120,(root.info.capabilities || {}).refresh || 60)].filter((v,i,a) => a.indexOf(v) === i).sort((a,b) => a-b); selectedValue: root.draft.refresh; onChosen: value => { root.edit("refresh", value); if (root.draft.fps > value) root.edit("fps", value) } }
+          Choice { values: root.refreshValues(); selectedValue: root.draft.refresh; onChosen: value => { root.edit("refresh", value); if (root.draft.fps > value) root.edit("fps", value) } }
           Label { text: "Límite de transmisión (FPS)" }
           Choice { values: [15, 24, 30, 45, 60]; selectedValue: root.draft.fps; onChosen: value => root.edit("fps", value) }
           Label { text: "Escala de interfaz" }
-          Choice { values: [1, 1.25, 1.6, 2]; labels: ["100 %", "125 %", "160 %", "200 %"]; selectedValue: root.draft.scale; onChosen: value => root.edit("scale", value) }
+          Choice { values: [1, 1.25, 1.5, 2]; labels: ["100 %", "125 %", "150 %", "200 %"]; selectedValue: root.draft.scale; onChosen: value => { if (root.validScale(value)) root.edit("scale", value); else { root.failed = true; root.feedback = "La resolución actual no admite esa escala en Hyprland. Para 150 % en esta tablet, usa 1920×1200." } } }
           Label { text: "Calidad JPEG (0–9)" }
           Choice { values: [0,1,2,3,4,5,6,7,8,9]; selectedValue: root.draft.quality; onChosen: value => root.edit("quality", value) }
           Label { text: "Compresión (0–9)" }
@@ -277,7 +305,7 @@ Panel {
         }
         Label { text: (root.info.devices || []).map(d => d.model + " · " + d.serial + " · " + d.state).join("\n") || "No se detectan dispositivos USB autorizados"; color: root.muted; font.pixelSize: Style.space(11) }
         RowLayout {
-          ActionButton { text: "Leer panel nativo"; onClicked: root.send("detect") }
+          ActionButton { text: "Leer modos del dispositivo"; onClicked: root.send("detect") }
           ActionButton { text: "Ver registro"; onClicked: root.send("logs") }
           ActionButton { text: "Ocultar registro"; visible: root.diagnostic !== ""; onClicked: root.diagnostic = "" }
         }

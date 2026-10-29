@@ -41,20 +41,30 @@ def parse_display(size, display):
     if not match:
         raise ValueError('Android no informó una resolución física válida')
     width, height = map(int, match.groups())
+    # Do not mix the built-in Android panel with HDMI / virtual displays.
+    blocks = [line for line in display.splitlines() if 'DisplayDeviceInfo{' in line and 'type BUILT_IN' in line]
+    source = next((line for line in blocks if 'FLAG_DEFAULT_DISPLAY' in line), blocks[0] if blocks else display)
     modes = [(int(w), int(h), float(hz)) for w,h,hz in re.findall(
-        r'width=(\d+),\s*height=(\d+),\s*fps=([\d.]+)', display)]
+        r'width=(\d+),\s*height=(\d+),\s*fps=([\d.]+)', source)]
+    if not blocks:
+        # Without a clearly identified panel only trust matching physical sizes.
+        modes = [(w,h,hz) for w,h,hz in modes if sorted((w,h)) == sorted((width,height))]
+    modes = [(w,h,hz) for w,h,hz in modes if w > 0 and h > 0 and math.isfinite(hz) and 10 <= hz <= 240]
     rates = [hz for w,h,hz in modes if sorted((w,h)) == sorted((width,height)) and math.isfinite(hz) and 10 <= hz <= 240]
     # Some Android vendors don't expose supportedModes in dumpsys.
     refresh = round(max(rates)) if rates else 60
+    supported = [dict(width=w,height=h,refresh=hz) for w,h,hz in sorted(set(
+        (w,h,round(hz)) for w,h,hz in modes))]
     return dict(width=width, height=height, refresh=refresh,
-                refreshDetected=bool(rates))
+                refreshDetected=bool(rates), supportedModes=supported,
+                modeSource='built-in' if blocks else 'matching-physical-fallback' if supported else 'unavailable')
 
 
 def proposed_config(device, cap):
     width, height = sorted((cap['width'], cap['height']), reverse=True)
     ratio = min(1, 4096 / width, 4096 / height, math.sqrt((4096*2160)/(width*height)))
     width, height = int(width*ratio)//2*2, int(height*ratio)//2*2
-    scale = next((s for s in ([1.6,1.25,1] if width > 1920 else [1])
+    scale = next((s for s in ([1.5,1.25,1] if width > 1920 else [1])
                   if all(abs(n/s - round(n/s)) < 0.01 for n in (width,height))), 1)
     return backend.validate(backend.DEFAULTS | dict(serial=device['serial'], width=width,
         height=height, refresh=min(120,cap['refresh']), fps=min(60,cap['refresh']), scale=scale))

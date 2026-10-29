@@ -26,15 +26,15 @@ class SettingsTests(unittest.TestCase):
                 backend.validate(patch)
 
     def test_presets_and_portrait(self):
-        for width, height, scale in [(2560,1600,1.6), (1920,1200,1.25), (1280,800,1),
-                                      (1600,2560,1.6)]:
+        for width, height, scale in [(2560,1600,1.25), (1920,1200,1.5), (1280,800,1),
+                                      (1600,2560,1.25)]:
             self.assertEqual(backend.validate(dict(width=width, height=height, scale=scale))['width'], width)
 
     def test_position(self):
         screens = [dict(name='DP-1', x=0, y=0, width=1920, height=1080, scale=1),
                    dict(name='DP-2', x=1920, y=0, width=1920, height=1080, scale=1)]
-        for side, expected in [('right',(3840,0)), ('left',(-1600,0)),
-                               ('above',(0,-1000)), ('below',(0,1080))]:
+        for side, expected in [('right',(3840,0)), ('left',(-1280,0)),
+                               ('above',(0,-800)), ('below',(0,1080))]:
             self.assertEqual(backend.position(backend.DEFAULTS | {'position':side}, screens), expected)
         self.assertEqual(backend.position(backend.DEFAULTS | {'anchor':'DP-1'}, screens), (1920,0))
         self.assertEqual(backend.position(backend.DEFAULTS | {'position':'custom','x':-10,'y':50}, screens), (-10,50))

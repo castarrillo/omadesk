@@ -21,8 +21,8 @@ RUNTIME = Path(os.environ.get('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}'))
 STATE = RUNTIME / 'tablet-usb-state.json'
 UNIT = 'tablet-usb.service'
 OUTPUT = 'TABLET-USB'
-DEFAULTS = dict(serial='', width=2560, height=1600, refresh=60,
-                fps=60, scale=1.6, position='right', anchor='', x=0, y=0,
+DEFAULTS = dict(serial='', width=1920, height=1200, refresh=60,
+                fps=60, scale=1.5, position='right', anchor='', x=0, y=0,
                 quality=8, compression=2, input=True, cursor=True)
 
 
@@ -65,7 +65,7 @@ def validate(value):
         raise ValueError('Escala: debe estar entre 1 y 3')
     # Hyprland requires integral logical dimensions at the requested scale.
     if any(abs(n / cfg['scale'] - round(n / cfg['scale'])) > 0.01 for n in (cfg['width'], cfg['height'])):
-        raise ValueError('Esta escala no divide la resolución en píxeles lógicos enteros; prueba 1, 1.25, 1.6 o 2')
+        raise ValueError('Esta escala no divide la resolución en píxeles lógicos enteros; prueba 100 %, 125 %, 150 % o 200 %. A 2560×1600, usa 125 % o 200 %; para 150 %, prueba 1920×1200.')
     for key in ('input', 'cursor'):
         if type(cfg[key]) is not bool:
             raise ValueError(f'{key}: se requiere un booleano')
@@ -138,6 +138,19 @@ def require_usb(cfg):
         raise RuntimeError('Tablet USB no disponible. Conecta el cable, desbloquea y autoriza la depuración USB.')
 
 
+def inspect_device(serial):
+    from setup_device import parse_display
+    require_usb({'serial': serial})
+    adb = ['adb', '-s', serial, 'shell']
+    cap = parse_display(command(adb + ['wm','size']), command(adb + ['dumpsys','display']))
+    cap['model'] = command(adb + ['getprop','ro.product.model'])
+    path = CONFIG.parent / 'devices.json'
+    known = json.loads(path.read_text()) if path.exists() else {}
+    known[serial] = cap
+    atomic_json(path,known)
+    return cap
+
+
 def status():
     cfg = settings()
     screens = monitors()
@@ -162,6 +175,7 @@ def start():
         return
     cfg = settings()
     require_usb(cfg)
+    inspect_device(cfg['serial'])
     position(cfg, monitors())  # Fail before starting, not in the background.
     env = {key: os.environ[key] for key in ('WAYLAND_DISPLAY', 'HYPRLAND_INSTANCE_SIGNATURE') if os.environ.get(key)}
     if len(env) != 2:
@@ -336,10 +350,8 @@ def main():
         if args.action == 'detect':
             cfg = settings()
             require_usb(cfg)
-            size = command(['adb', '-s', cfg['serial'], 'shell', 'wm', 'size'])
-            display = command(['adb', '-s', cfg['serial'], 'shell', 'dumpsys', 'display'])
-            modes = re.findall(r'width=\d+, height=\d+, fps=[\d.]+', display)
-            print(json.dumps(dict(size=size, modes=list(dict.fromkeys(modes)))))
+            inspect_device(cfg['serial'])
+            print(json.dumps(status(),ensure_ascii=False))
             return
         print(json.dumps(status(), ensure_ascii=False))
 

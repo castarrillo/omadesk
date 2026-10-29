@@ -29,7 +29,24 @@ class EnrollmentTests(unittest.TestCase):
     def test_display_modes_match_physical_panel(self):
         cap=setup.parse_display('Physical size: 1600x2560\nOverride size: 800x1280',
             'width=1600, height=2560, fps=60.000004 width=1920, height=1080, fps=144.0')
-        self.assertEqual(cap,dict(width=1600,height=2560,refresh=60,refreshDetected=True))
+        self.assertEqual(cap['refresh'],60)
+        self.assertEqual(cap['supportedModes'],[dict(width=1600,height=2560,refresh=60)])
+        self.assertEqual(cap['modeSource'],'matching-physical-fallback')
+
+    def test_builtin_modes_exclude_hdmi_and_virtual(self):
+        display='''DisplayDeviceInfo{"Internal": supportedModes [{width=1600, height=2560, fps=60.0}, {width=1200, height=1920, fps=90.0}], type BUILT_IN, FLAG_DEFAULT_DISPLAY}
+DisplayDeviceInfo{"HDMI": supportedModes [{width=1600, height=2560, fps=144.0}], type HDMI}'''
+        cap=setup.parse_display('Physical size: 1600x2560',display)
+        self.assertEqual(cap['modeSource'],'built-in')
+        self.assertEqual(cap['refresh'],60)
+        self.assertEqual(cap['supportedModes'],[dict(width=1200,height=1920,refresh=90),dict(width=1600,height=2560,refresh=60)])
+
+    def test_scale_150_only_when_compatible(self):
+        cfg=setup.proposed_config(dict(serial='TEST'),dict(width=1440,height=2560,refresh=60))
+        self.assertNotEqual(cfg['scale'],1.5)
+        backend.validate(backend.DEFAULTS | dict(width=1920,height=1200,scale=1.5))
+        with self.assertRaises(ValueError):
+            backend.validate(backend.DEFAULTS | dict(width=2560,height=1600,scale=1.5))
 
     def test_phone_high_refresh_and_scale(self):
         cap=setup.parse_display('Physical size: 1080x2400','width=1080, height=2400, fps=120.0')

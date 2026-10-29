@@ -111,6 +111,10 @@ Haz clic en el icono de tablet de la barra: el título debe ser **Omadesk**.
 
 - Conectar, desconectar, reconectar y abrir AVNC.
 - Resolución (incluida la nativa detectada), orientación, escala y posición.
+- Modos físicos declarados por el panel Android, sin mezclar HDMI o pantallas
+  virtuales cuando Android permite identificar la pantalla integrada.
+- Resoluciones de transmisión virtuales reducidas opcionales, etiquetadas como
+  **virtuales**, no como resoluciones físicas soportadas por el dispositivo.
 - Posición relativa a un monitor concreto o coordenadas lógicas X/Y.
 - Frecuencia virtual y límite independiente de FPS.
 - Calidad JPEG 0–9, compresión 0–9, entrada remota y cursor.
@@ -186,6 +190,20 @@ pueden usar codificación sin pérdidas. La compresión es una preferencia, no u
 bitrate garantizado. **60 FPS configurados no garantizan 60 FPS sostenidos.**
 VNC es adecuado para productividad, no promete rendimiento de monitor nativo
 para juegos/vídeo. No hay audio, presión de lápiz ni multitáctil nativo.
+
+Las escalas del panel son **100 %, 125 %, 150 % y 200 %**. 150 % requiere una
+resolución divisible por 1.5: 1920×1200 funciona, pero 2560×1600 no. Cambiar a
+una resolución incompatible selecciona automáticamente una escala válida;
+seleccionar manualmente una escala incompatible muestra un aviso sin aplicarla.
+La configuración automática prefiere 150 % cuando es compatible; si no, utiliza
+125 % o 100 %. Las configuraciones antiguas al 160 % siguen siendo legibles
+por compatibilidad, pero esa opción ya no se ofrece en el panel.
+
+`omadesk detect` vuelve a consultar y guardar los modos del Android. También se
+consultan al iniciar una nueva conexión. El panel muestra **lo que Android
+declara**, no una lista universal de modos inventados. Si no declara modos,
+se señala que faltan por confirmar; no se garantiza compatibilidad con todo
+fabricante, ROM o versión de Android.
 
 El servicio termina al desconectar USB y retira su monitor virtual. No se añade
 arranque automático al iniciar sesión. Cerrar AVNC no retira el monitor: usa

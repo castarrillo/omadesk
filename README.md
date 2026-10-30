@@ -209,6 +209,21 @@ El servicio termina al desconectar USB y retira su monitor virtual. No se añade
 arranque automático al iniciar sesión. Cerrar AVNC no retira el monitor: usa
 **Desconectar** o `omadesk stop`.
 
+### Mantener imagen y posición al cambiar las pantallas del portátil
+
+Durante una conexión, Omadesk conserva una instantánea de la resolución,
+frecuencia, escala, orientación y posición aplicada. Comprueba su monitor
+virtual cada dos segundos y, si Hyprland lo restablece al recargar o al
+activar/desactivar otras pantallas, vuelve a aplicar esa instantánea.
+No modifica los monitores físicos ni necesita reiniciar AVNC.
+
+Las posiciones relativas se calculan una vez al conectar y después se fijan:
+un cambio en la pantalla del portátil no recoloca la tablet. Para recalcular
+la posición relativa, usa Reconectar o Guardar y aplicar. Guardar ajustes sin
+aplicarlos no cambia la instantánea que se mantiene durante la conexión.
+Puede verse un cambio transitorio hasta la siguiente comprobación; esto no
+evita el restablecimiento interno de Hyprland, sino que lo corrige.
+
 ## Pruebas y problemas frecuentes
 
 ```bash

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "local.tablet-usb",
   "name": "Omadesk",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "author": "Local",
   "license": "MIT",
   "description": "Omadesk: monitor extendido Android por USB con preparación asistida del dispositivo.",

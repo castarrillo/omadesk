@@ -66,6 +66,47 @@ class SettingsTests(unittest.TestCase):
                 self.assertEqual(stop.call_count, 2)
 
 
+class MonitorPersistenceTests(unittest.TestCase):
+    def setUp(self):
+        self.cfg = backend.DEFAULTS | {'position':'custom','x':3840,'y':1080}
+        self.current = dict(name=backend.OUTPUT,width=self.cfg['width'],height=self.cfg['height'],
+                            refreshRate=59.999,scale=self.cfg['scale'],x=3840,y=1080,transform=0)
+
+    def test_matching_monitor_is_not_reconfigured(self):
+        with patch.object(backend,'monitors',return_value=[self.current]), patch.object(backend,'command') as command:
+            self.assertFalse(backend.ensure_monitor(self.cfg,3840,1080))
+            command.assert_not_called()
+
+    def test_each_reload_drift_is_restored(self):
+        for field,value in [('width',1280),('height',1080),('refreshRate',30),
+                            ('scale',2),('x',5760),('y',0),('transform',1),('disabled',True)]:
+            with self.subTest(field=field), patch.object(backend,'monitors',return_value=[self.current|{field:value}]), \
+                 patch.object(backend,'command',return_value='ok') as command:
+                self.assertTrue(backend.ensure_monitor(self.cfg,3840,1080))
+                command.assert_called_once()
+                args=command.call_args.args[0]
+                self.assertEqual(args[:2],['hyprctl','eval'])
+                self.assertIn('position="3840x1080"',args[2])
+                self.assertIn('scale=1.5',args[2])
+
+    def test_missing_headless_is_recreated(self):
+        with patch.object(backend,'monitors',return_value=[]), patch.object(backend,'command',return_value='ok') as command:
+            self.assertTrue(backend.ensure_monitor(self.cfg,3840,1080))
+            self.assertEqual(command.call_args_list[0].args[0],['hyprctl','output','create','headless',backend.OUTPUT])
+            self.assertEqual(command.call_count,2)
+
+    def test_relative_position_does_not_follow_physical_hotplug(self):
+        cfg=self.cfg|{'position':'right'}
+        with patch.object(backend,'monitors',return_value=[self.current]), patch.object(backend,'position') as recalculate:
+            self.assertFalse(backend.ensure_monitor(cfg,3840,1080))
+            recalculate.assert_not_called()
+
+    def test_compositor_errors_are_visible_to_retry_loop(self):
+        with patch.object(backend,'monitors',side_effect=RuntimeError('reloading')):
+            with self.assertRaisesRegex(RuntimeError,'reloading'):
+                backend.ensure_monitor(self.cfg,3840,1080)
+
+
 class ProtocolTests(unittest.TestCase):
     def test_overrides_quality_and_compression_preserving_encodings(self):
         packet = rfb.encodings_packet([7,16,-32,-247,-239,-223], 9, 2)

@@ -221,6 +221,37 @@ def wait_port(port, proc):
     raise RuntimeError(f'No se abrió el puerto local {port}')
 
 
+def monitor_matches(current, cfg, x, y):
+    """Compare physical mode and logical geometry, tolerating refresh rounding."""
+    return bool(current and current.get('width') == cfg['width']
+                and current.get('height') == cfg['height']
+                and abs(current.get('refreshRate', 0) - cfg['refresh']) < 0.15
+                and abs(current.get('scale', 0) - cfg['scale']) < 0.001
+                and current.get('x') == x and current.get('y') == y
+                and current.get('transform', 0) == 0
+                and not current.get('disabled', False))
+
+
+def ensure_monitor(cfg, x, y):
+    """Pin the active snapshot, not saved-but-unapplied settings or auto layout.
+
+    Hyprland reload/hotplug may reset a headless output to its default mode.
+    Reapply only our output and only on drift. Relative positions are resolved
+    once when connecting: unplugging a physical monitor must not move Android.
+    """
+    current = next((m for m in monitors() if m['name'] == OUTPUT), None)
+    if monitor_matches(current, cfg, x, y):
+        return False
+    if current is None:
+        command(['hyprctl', 'output', 'create', 'headless', OUTPUT])
+    mode = f'{cfg["width"]}x{cfg["height"]}@{cfg["refresh"]}'
+    lua = f'hl.monitor({{output="{OUTPUT}",mode="{mode}",position="{x}x{y}",scale={cfg["scale"]},transform=0' + '})'
+    result = command(['hyprctl', 'eval', lua])
+    if result != 'ok':
+        raise RuntimeError(result)
+    return True
+
+
 def run(cfg):
     lock = (RUNTIME / 'tablet-usb.lock').open('w')
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -240,11 +271,8 @@ def run(cfg):
         x, y = position(cfg, screens)
         command(['hyprctl', 'output', 'create', 'headless', OUTPUT])
         created = True
+        ensure_monitor(cfg, x, y)
         mode = f'{cfg["width"]}x{cfg["height"]}@{cfg["refresh"]}'
-        lua = f'hl.monitor({{output="{OUTPUT}",mode="{mode}",position="{x}x{y}",scale={cfg["scale"]}' + '})'
-        result = command(['hyprctl', 'eval', lua])
-        if result != 'ok':
-            raise RuntimeError(result)
         args = ['wayvnc', '-C', '/dev/null', '-S', str(RUNTIME / 'tablet-usb-wayvnc'),
                 '-o', OUTPUT, '-f', str(cfg['fps']), '-R', '-L', 'info']
         if cfg['cursor']:
@@ -265,6 +293,13 @@ def run(cfg):
             if command(['adb', '-s', cfg['serial'], 'get-state'], timeout=5, check=False) != 'device':
                 print('USB desconectado', flush=True)
                 return
+            try:
+                if ensure_monitor(cfg, x, y):
+                    print(f'Geometría restaurada tras recarga/hotplug: {mode}, escala {cfg["scale"]}, {x}x{y}', flush=True)
+            except (RuntimeError, OSError, subprocess.SubprocessError, ValueError) as error:
+                # Compositor topology may be unsettled while hotplug/reload runs.
+                # Keep the USB session alive and retry on the next iteration.
+                print(f'No se pudo restaurar el monitor todavía; se reintentará: {error}', flush=True)
             time.sleep(2)
         raise RuntimeError('Un proceso de transmisión terminó; consulta el registro')
     finally:

@@ -37,6 +37,6 @@ fi
 if (( restart )); then omarchy restart shell; fi
 if (( ! skip )); then
   echo 'Preparando el Android conectado. Desbloquéalo y acepta la autorización USB si aparece.'
-  /usr/bin/python "${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/local.tablet-usb/setup_device.py" "${setup_args[@]}"
+  /usr/bin/python "${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/io.github.castarrillo.omadesk/setup_device.py" "${setup_args[@]}"
 fi
 echo 'Instalación finalizada. Abre Omadesk en la barra o ejecuta: omadesk start'

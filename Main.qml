@@ -8,8 +8,8 @@ import qs.Ui
 
 Panel {
   id: root
-  moduleName: "local.tablet-usb"
-  ipcTarget: "local.tablet-usb"
+  moduleName: "io.github.castarrillo.omadesk"
+  ipcTarget: "io.github.castarrillo.omadesk"
   manageIpc: true
   implicitWidth: icon.implicitWidth
   implicitHeight: icon.implicitHeight
@@ -22,7 +22,7 @@ Panel {
   property string diagnostic: ""
   property string actionVerb: ""
   property bool showVirtualResolutions: false
-  readonly property string backend: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/omarchy/plugins/local.tablet-usb/backend.py"
+  readonly property string backend: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/omarchy/plugins/io.github.castarrillo.omadesk/backend.py"
   readonly property color ink: Color.foreground
   readonly property color muted: Qt.rgba(ink.r, ink.g, ink.b, 0.65)
   readonly property bool busy: action.running
@@ -313,6 +313,7 @@ Panel {
           visible: root.diagnostic !== ""
           Layout.fillWidth: true
           text: root.diagnostic
+          textFormat: TextEdit.PlainText
           readOnly: true
           wrapMode: TextEdit.WrapAnywhere
           color: root.muted

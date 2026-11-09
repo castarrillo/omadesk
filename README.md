@@ -1,5 +1,10 @@
 # Omadesk
 
+![Panel de Omadesk](preview.png)
+
+**Autor:** [castarrillo](https://github.com/castarrillo) · **Licencia:** MIT ·
+**ID:** `io.github.castarrillo.omadesk`
+
 Convierte una tablet o teléfono Android en un **monitor extendido de Omarchy por
 cable USB**. Incluye un plugin de barra Quickshell, un controlador de Hyprland
 y un instalador que prepara el PC y el Android conectado.
@@ -18,21 +23,23 @@ iOS ni todas las variantes de Android de forma garantizada.
 2. Conecta un **cable de datos**, desbloquea el dispositivo y acepta la
    autorización de depuración para este ordenador. Algunos fabricantes exigen
    además permitir instalaciones por USB; el instalador no elude ese permiso.
-3. Abre una terminal en la carpeta del repositorio y ejecuta **como tu usuario**:
+3. Descarga e instala desde una terminal **como tu usuario**:
 
    ```bash
+   git clone https://github.com/castarrillo/omadesk.git
+   cd omadesk
    bash install.sh
    ```
 
 Si has descargado un ZIP, descomprímelo primero. Si has clonado el repositorio,
-entra en la carpeta clonada antes de ejecutar el comando. No uses `sudo bash
+omite `git clone` y entra en la carpeta clonada antes de ejecutar `bash install.sh`. No uses `sudo bash
 install.sh`: el instalador solicita elevación solo para los paquetes del PC.
 
 El instalador:
 
 - Instala los paquetes Arch que falten: `android-tools`, `android-udev`, `wayvnc`,
   `python`, `jq` e `iproute2`, mediante `omarchy pkg add`.
-- Instala el plugin en `~/.config/omarchy/plugins/local.tablet-usb/`, los comandos
+- Instala el plugin en `~/.config/omarchy/plugins/io.github.castarrillo.omadesk/`, los comandos
   `omadesk` y `tablet-usb`, y el lanzador **Omadesk**.
 - Habilita el plugin y **reinicia la shell**, para que el panel no conserve el
   título/código de una versión anterior. No cierra tus aplicaciones ni reinicia
@@ -95,11 +102,11 @@ del archivo fijado; no sustituye la confianza en el editor/origen del APK.
 
 ### Si instalas mediante el gestor de plugins
 
-`omarchy plugin add URL_DEL_REPOSITORIO --enable` **no ejecuta un instalador
+`omarchy plugin add https://github.com/castarrillo/omadesk --enable` **no ejecuta un instalador
 arbitrario del repositorio**. Después de añadirlo, ejecuta explícitamente:
 
 ```bash
-bash ~/.config/omarchy/plugins/local.tablet-usb/install.sh
+bash ~/.config/omarchy/plugins/io.github.castarrillo.omadesk/install.sh
 ```
 
 Ese paso es necesario para preparar PC y Android. No se instalan paquetes ni
@@ -147,7 +154,7 @@ El comando anterior `tablet-usb` sigue disponible como alias.
 
 ## Archivos y actualización
 
-- Código instalado: `~/.config/omarchy/plugins/local.tablet-usb/`.
+- Código instalado: `~/.config/omarchy/plugins/io.github.castarrillo.omadesk/`.
 - Ajustes privados: `~/.config/tablet-usb/settings.json`.
 - Capacidades de dispositivos: `~/.config/tablet-usb/devices.json`.
 - Respaldos del instalador: `~/.local/share/omadesk/backups/`.
@@ -155,8 +162,12 @@ El comando anterior `tablet-usb` sigue disponible como alias.
 
 Se respetan `XDG_CONFIG_HOME`, `XDG_DATA_HOME` y `XDG_CACHE_HOME`.
 Los ajustes/números de serie no forman parte del repositorio. La identidad
-interna `local.tablet-usb` se mantiene para conservar la ubicación y los ajustes
-de las instalaciones iniciales: **el nombre visible es Omadesk**.
+interna pública es `io.github.castarrillo.omadesk`. El instalador migra los
+campos de identidad de `local.tablet-usb` en la barra, conservando su ubicación,
+respalda `shell.json` antes de modificarlo y deshabilita el plugin anterior.
+No elimina su carpeta: puede estar siendo utilizada por una transmisión activa.
+Los nombres del servicio, monitor y archivos de ajustes se conservan para mantener
+la compatibilidad y no perder tus configuraciones.
 
 Para actualizar desde un clon: `git pull` y `bash install.sh`. El instalador
 respalda los archivos que reemplaza y conserva los ajustes del dispositivo.
@@ -246,9 +257,30 @@ Solo se ha probado físicamente con la Huawei MRX-W09 de desarrollo. La detecci�
 de otros tamaños, varios dispositivos, errores y negociación RFB tiene pruebas
 automatizadas, no una certificación de todos los teléfonos Android.
 
-Para ocultar el plugin: `omarchy plugin disable local.tablet-usb`.
-Ocultar el icono no detiene la transmisión: ejecuta primero `omadesk stop`.
-No borres su carpeta si quieres conservar los comandos y la transmisión.
+## Desinstalación
+
+Para ocultar solo el icono:
+
+```bash
+omarchy plugin disable io.github.castarrillo.omadesk
+```
+
+Esto no detiene la transmisión: usa `omadesk stop`.
+
+Para retirar el plugin, sus comandos propios y el lanzador:
+
+```bash
+/usr/bin/python ~/.config/omarchy/plugins/io.github.castarrillo.omadesk/uninstall.py
+# Lee el aviso y confirma explícitamente:
+/usr/bin/python ~/.config/omarchy/plugins/io.github.castarrillo.omadesk/uninstall.py --yes
+```
+
+El desinstalador respalda el código y los lanzadores, detiene la transmisión y
+delega la retirada del plugin al gestor de Omarchy. Conserva tus ajustes de
+`~/.config/tablet-usb/`, los respaldos, AVNC y los paquetes del sistema, que pueden
+ser utilizados por otros programas. AVNC se puede desinstalar desde Android si
+ya no lo necesitas. Una carpeta antigua `local.tablet-usb` se conserva deshabilitada;
+puede retirarse posteriormente desde el gestor una vez comprobada la migración.
 
 ## Publicar un clon local en GitHub
 

@@ -7,6 +7,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+from secure_transport import private_path
 
 PLUGIN_ID = 'io.github.castarrillo.omadesk'
 
@@ -35,6 +36,7 @@ def main():
     check=subprocess.run(['systemctl','--user','is-active','tablet-usb.service'],capture_output=True,text=True)
     if check.stdout.strip() in ('active','activating','deactivating'):
         raise RuntimeError('La transmisión sigue activa; no se retirará su código')
+    subprocess.run(['adb','-L','localfilesystem:'+str(private_path('adb.sock')),'kill-server'],check=False,timeout=10,umask=0o077)
     for name in ('omadesk','tablet-usb'):
         path=Path.home()/'.local/bin'/name
         if owned_wrapper(path):

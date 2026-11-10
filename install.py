@@ -14,8 +14,8 @@ DATA = Path(os.environ.get('XDG_DATA_HOME', Path.home()/'.local/share'))
 PLUGIN_ID = 'io.github.castarrillo.omadesk'
 LEGACY_ID = 'local.tablet-usb'
 DEST = CONFIG/'omarchy/plugins'/PLUGIN_ID
-FILES = ['Main.qml','manifest.json','backend.py','rfb_quality.py','setup_device.py',
-         'install.sh','install.py','uninstall.py','README.md','LICENSE','.gitignore','preview.png']
+FILES = ['Main.qml','manifest.json','backend.py','rfb_quality.py','secure_transport.py','setup_device.py',
+         'install.sh','install.py','uninstall.py','README.md','SECURITY.md','LICENSE','.gitignore','preview.png']
 
 
 def migrate_layout(value):

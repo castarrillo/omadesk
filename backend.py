@@ -14,6 +14,7 @@ import sys
 import tempfile
 import time
 from urllib.parse import urlencode
+from secure_transport import adb_command, private_path, remove_stale_socket
 
 HERE = Path(__file__).resolve().parent
 CONFIG = Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config')) / 'tablet-usb/settings.json'
@@ -27,7 +28,9 @@ DEFAULTS = dict(serial='', width=1920, height=1200, refresh=60,
 
 
 def command(args, timeout=10, check=True):
-    result = subprocess.run(args, text=True, capture_output=True, timeout=timeout)
+    if args[0] == 'adb':
+        args = adb_command(args, RUNTIME)
+    result = subprocess.run(args, text=True, capture_output=True, timeout=timeout, umask=0o077)
     if check and result.returncode:
         raise RuntimeError((result.stderr or result.stdout or 'Falló el comando').strip())
     return result.stdout.strip()
@@ -156,8 +159,11 @@ def status():
     screens = monitors()
     is_active = active()
     state = json.loads(STATE.read_text()) if STATE.exists() and is_active else {}
-    clients = command(['ss', '-tnH', 'sport = :5909'], check=False)
-    return dict(settings=cfg, active=is_active, connected=is_active and 'ESTAB' in clients,
+    try:
+        clients = json.loads(private_path('clients.json', RUNTIME).read_text()).get('clients', 0)
+    except (FileNotFoundError, ValueError):
+        clients = 0
+    return dict(settings=cfg, active=is_active, connected=is_active and clients > 0,
                 devices=usb_devices(), monitors=[dict(name=m['name'], description=m.get('description', ''))
                                                for m in screens if m['name'] != OUTPUT],
                 monitor=next((m for m in screens if m['name'] == OUTPUT), None),
@@ -209,16 +215,18 @@ def open_viewer(cfg):
              'android.intent.action.VIEW', '-d', "'" + uri + "'", '-p', 'com.gaurav.avnc'])
 
 
-def wait_port(port, proc):
+def wait_unix(path, proc):
     for _ in range(60):
         if proc.poll() is not None:
             raise RuntimeError(f'Proceso de transmisión terminó ({proc.returncode})')
         try:
-            with socket.create_connection(('127.0.0.1', port), timeout=0.1):
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                client.settimeout(0.1)
+                client.connect(str(path))
                 return
         except OSError:
             time.sleep(0.1)
-    raise RuntimeError(f'No se abrió el puerto local {port}')
+    raise RuntimeError('No se abrió el socket Unix privado: ' + str(path))
 
 
 def monitor_matches(current, cfg, x, y):
@@ -264,27 +272,27 @@ def run(cfg):
         screens = monitors()
         if any(m['name'] == OUTPUT for m in screens):
             raise RuntimeError('TABLET-USB ya existe; no se modificará un monitor ajeno')
-        for port in (5909, 5910):
-            with socket.socket() as probe:
-                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                probe.bind(('127.0.0.1', port))
+        vnc_path = private_path('vnc.sock', RUNTIME)
+        quality_path = private_path('quality.sock', RUNTIME)
+        for path in (vnc_path, quality_path, private_path('wayvncctl', RUNTIME)):
+            remove_stale_socket(path)
         x, y = position(cfg, screens)
         command(['hyprctl', 'output', 'create', 'headless', OUTPUT])
         created = True
         ensure_monitor(cfg, x, y)
         mode = f'{cfg["width"]}x{cfg["height"]}@{cfg["refresh"]}'
-        args = ['wayvnc', '-C', '/dev/null', '-S', str(RUNTIME / 'tablet-usb-wayvnc'),
+        args = ['wayvnc', '-C', '/dev/null', '-u', '-S', str(private_path('wayvncctl', RUNTIME)),
                 '-o', OUTPUT, '-f', str(cfg['fps']), '-R', '-L', 'info']
         if cfg['cursor']:
             args.append('-r')
         if not cfg['input']:
             args.append('-d')
-        children.append(subprocess.Popen(args + ['127.0.0.1', '5910']))
-        wait_port(5910, children[-1])
+        children.append(subprocess.Popen(args + [str(vnc_path)], umask=0o077))
+        wait_unix(vnc_path, children[-1])
         children.append(subprocess.Popen([sys.executable, str(HERE / 'rfb_quality.py'),
-                                         '--quality', str(cfg['quality']), '--compression', str(cfg['compression'])]))
-        wait_port(5909, children[-1])
-        command(['adb', '-s', cfg['serial'], 'reverse', 'tcp:5909', 'tcp:5909'])
+                                         '--quality', str(cfg['quality']), '--compression', str(cfg['compression'])], umask=0o077))
+        wait_unix(quality_path, children[-1])
+        command(['adb', '-s', cfg['serial'], 'reverse', 'tcp:5909', 'localfilesystem:' + str(quality_path)])
         reverse_installed = True
         open_viewer(cfg)
         atomic_json(STATE, dict(settings=cfg, position=[x, y], started=time.time()))
@@ -315,13 +323,16 @@ def run(cfg):
         try:
             if reverse_installed:
                 command(['adb', '-s', cfg['serial'], 'reverse', '--remove', 'tcp:5909'], timeout=4, check=False)
-        except (OSError, subprocess.SubprocessError):
+        except (OSError, RuntimeError, subprocess.SubprocessError):
             pass
         try:
             if created:
                 command(['hyprctl', 'output', 'remove', OUTPUT], check=False)
         finally:
             STATE.unlink(missing_ok=True)
+            for name in ('vnc.sock', 'quality.sock', 'wayvncctl'):
+                remove_stale_socket(private_path(name, RUNTIME))
+            private_path('clients.json', RUNTIME).unlink(missing_ok=True)
 
 
 def main():
@@ -331,7 +342,7 @@ def main():
         return
     parser = argparse.ArgumentParser()
     parser.add_argument('action', nargs='?', default='start', choices=['start', 'stop', 'restart', 'status',
-                        'save', 'apply', 'run', 'logs', 'viewer', 'detect'])
+                        'save', 'apply', 'run', 'logs', 'viewer', 'detect', 'devices'])
     parser.add_argument('--settings')
     parser.add_argument('--snapshot')
     args = parser.parse_args()
@@ -340,6 +351,9 @@ def main():
         return
     with (RUNTIME / 'tablet-usb-control.lock').open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
+        if args.action == 'devices':
+            print(json.dumps(usb_devices(), ensure_ascii=False))
+            return
         if args.action == 'apply':
             cfg = validate(json.loads(args.settings))
             require_usb(cfg)

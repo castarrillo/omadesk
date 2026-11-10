@@ -70,7 +70,7 @@ Si el comando no se encuentra, abre otra terminal o usa `~/.local/bin/omadesk`.
 ### Varios dispositivos / instalación sin Android conectado
 
 ```bash
-adb devices -l
+omadesk devices
 bash install.sh --serial NUMERO_DE_SERIE
 bash install.sh --skip-device          # Instalar solo en el PC
 omadesk setup --serial NUMERO_DE_SERIE  # Preparar Android después
@@ -142,6 +142,7 @@ omadesk start
 omadesk stop
 omadesk restart
 omadesk status      # JSON: ajustes guardados, aplicados y monitor real
+omadesk devices     # dispositivos del servidor ADB privado
 omadesk viewer
 omadesk detect
 omadesk logs
@@ -180,13 +181,46 @@ omarchy restart shell
 ## Arquitectura, seguridad y límites
 
 ```text
-Hyprland TABLET-USB → WayVNC 127.0.0.1:5910
-                   → proxy RFB de calidad 127.0.0.1:5909
-                   → adb reverse por USB → AVNC Android
+Hyprland TABLET-USB → WayVNC: $XDG_RUNTIME_DIR/omadesk/vnc.sock
+                   → proxy: $XDG_RUNTIME_DIR/omadesk/quality.sock
+                   → ADB privado: $XDG_RUNTIME_DIR/omadesk/adb.sock
+                   → USB → 127.0.0.1:5909 en Android → AVNC
 ```
 
-Solo escucha en loopback; no abre VNC a la LAN. Otros procesos locales sí pueden
-acceder a estos puertos sin autenticación. No habilita ADB inalámbrico.
+Desde **v1.2.3 no hay listeners VNC TCP en el PC**, ni siquiera en loopback.
+VNC, el proxy y ADB utilizan sockets Unix de filesystem dentro de un directorio
+0700 propiedad del usuario. El proxy verifica también el UID del cliente con
+`SO_PEERCRED`. Se rechazan directorios con permisos de grupo/otros o symlinks;
+no hay fallback a TCP ni sockets abstractos.
+
+El servidor ADB se selecciona explícitamente con `-L localfilesystem:...` para
+cada operación. No se usa el servidor TCP compartido 5037. Si existe uno de esa
+misma cuenta, Omadesk se niega a iniciar o termina la transmisión al detectarlo
+en su siguiente operación ADB: ese servidor podría actuar como proxy privilegiado
+para otros usuarios locales. **No abras Android Studio/scrcpy u otras herramientas
+que vuelvan a iniciar un ADB compartido de la misma cuenta mientras usas Omadesk.**
+La supervisión no es un mecanismo instantáneo de contención frente a otros
+servidores inseguros iniciados por programas de tu propia cuenta. Para migrar:
+
+```bash
+omadesk stop
+# Cierra las herramientas que usan el ADB compartido; esto las desconecta:
+adb kill-server
+omadesk devices  # usa únicamente ADB privado
+omadesk start
+```
+
+No se desactiva automáticamente el servidor ADB de otras herramientas. Si una
+de ellas necesita acceso simultáneo, configúrala explícitamente para utilizar
+el mismo socket ADB privado en vez de crear un listener TCP, o no las uses a la vez.
+El puerto 5909 permanece **solo dentro del Android autorizado**, que se considera
+un dispositivo de confianza: otras apps de ese Android podrían acceder a su
+loopback. No protege contra root, procesos del mismo UID, una cuenta propietaria
+comprometida ni servicios ajenos que expongan sus privilegios a otros usuarios.
+
+`-C /dev/null` selecciona una configuración dedicada de WayVNC, no una excepción
+de autenticación sobre un puerto público: el transporte se restringe mediante
+permisos Unix y UID. No se habilita ADB inalámbrico. Consulta [SECURITY.md](SECURITY.md).
 
 La frecuencia física se obtiene de `dumpsys display` cuando Android la informa.
 Si no, se indica que se ha usado una propuesta de 60 Hz; no es una medición.

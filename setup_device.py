@@ -103,7 +103,7 @@ def verified_apk(source=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Omadesk: prepara Android por USB e instala AVNC si falta')
-    parser.add_argument('--serial', help='Número de serie de adb devices -l')
+    parser.add_argument('--serial', help='Número de serie de omadesk devices (servidor ADB privado)')
     parser.add_argument('--reset-image', action='store_true', help='Usar ajustes detectados incluso si ya existen ajustes de este dispositivo')
     parser.add_argument('--apk', help='APK oficial AVNC 3.3.1 local; se verifica SHA-256')
     parser.add_argument('--dry-run', action='store_true', help='Solo detectar y mostrar; no descargar, instalar ni guardar')

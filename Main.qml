@@ -322,7 +322,7 @@ Panel {
           background: Rectangle { color: Color.background; radius: 4 }
           selectByMouse: true
         }
-        Label { text: "Solo USB · puertos locales 5909/5910 · sin root ni cambios de firmware"; color: root.muted; font.pixelSize: Style.space(11) }
+        Label { text: "Solo USB · sockets Unix privados · sin puertos VNC TCP en el PC"; color: root.muted; font.pixelSize: Style.space(11) }
       }
     }
   }
